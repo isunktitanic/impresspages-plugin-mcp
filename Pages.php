@@ -148,7 +148,10 @@ class Pages
         );
     }
 
-    public static function details($row, $includeHtml = false)
+    /**
+     * @param bool $draft Read the latest revision (the draft, if there is one) instead of the published one
+     */
+    public static function details($row, $includeHtml = false, $draft = false)
     {
         $page = self::summary($row);
         $page += array(
@@ -165,9 +168,11 @@ class Pages
             'createdAt' => self::date($row['createdAt']),
         );
 
-        $revisionId = self::publishedRevisionId($row['id']);
-        $latestRevisionId = ipDb()->selectValue('revision', 'revisionId', array('pageId' => $row['id']), 'ORDER BY `revisionId` DESC');
-        $page['hasUnpublishedChanges'] = $latestRevisionId && $latestRevisionId != $revisionId;
+        $publishedRevisionId = self::publishedRevisionId($row['id']);
+        $latestRevisionId = ipDb()->selectValue('revision', 'revisionId', array('pageId' => $row['id']), 'ORDER BY `createdAt` DESC, `revisionId` DESC');
+        $page['hasUnpublishedChanges'] = $latestRevisionId && $latestRevisionId != $publishedRevisionId;
+        $revisionId = $draft && $latestRevisionId ? $latestRevisionId : $publishedRevisionId;
+        $page['version'] = $revisionId == $publishedRevisionId ? 'published' : 'draft';
 
         $blocks = array();
         $text = array();

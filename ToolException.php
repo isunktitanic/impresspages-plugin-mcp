@@ -7,4 +7,20 @@ namespace Plugin\Mcp;
  */
 class ToolException extends \Exception
 {
+    protected $denied = false;
+
+    /**
+     * The token isn't allowed to do this. Logged as "denied".
+     */
+    public static function denied($message)
+    {
+        $e = new self($message);
+        $e->denied = true;
+        return $e;
+    }
+
+    public function isDenied()
+    {
+        return $this->denied;
+    }
 }

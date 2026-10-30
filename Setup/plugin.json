@@ -1,8 +1,8 @@
 {
     "title": "MCP Server",
-    "version": "1.0",
+    "version": "1.1",
     "name": "Mcp",
-    "description": "Lets AI assistants such as Claude read your pages over the Model Context Protocol. Read-only, with API tokens, a rate limit and a request log.",
+    "description": "Lets AI assistants such as Claude read your pages over the Model Context Protocol. Read-only by default; tokens you allow can save edits as drafts for you to review. With a rate limit and a request log.",
     "author": "ImpressPages community",
     "options": [
         {

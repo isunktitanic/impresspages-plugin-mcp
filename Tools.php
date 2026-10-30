@@ -3,13 +3,94 @@
 namespace Plugin\Mcp;
 
 /**
- * The tools an assistant can call. All of them only read.
+ * The tools an assistant can call. The editing tools are only offered to tokens with "allow editing" on.
  */
 class Tools
 {
     const MAX_LIMIT = 200;
 
-    public static function definitions()
+    /**
+     * @param array|null $token Without a token: every tool, including the editing ones
+     */
+    public static function definitions($token = null)
+    {
+        $tools = self::readTools();
+        if ($token === null || Model::canEdit($token)) {
+            foreach ($tools as &$tool) {
+                if ($tool['name'] === 'get_page') {
+                    $tool['inputSchema']['properties']['version'] = array(
+                        'type' => 'string',
+                        'enum' => array('published', 'draft'),
+                        'default' => 'published',
+                        'description' => '"draft" returns the latest unpublished version, with the widget ids to edit.',
+                    );
+                }
+            }
+            unset($tool);
+            $tools = array_merge($tools, self::editTools());
+        }
+        return $tools;
+    }
+
+    protected static function editTools()
+    {
+        $edit = array('readOnlyHint' => false, 'destructiveHint' => false, 'idempotentHint' => true, 'openWorldHint' => false);
+
+        return array(
+            array(
+                'name' => 'propose_page_fields',
+                'title' => 'Propose page title and SEO fields',
+                'description' => 'Proposes a new title, meta title, meta description and/or keywords for a page. Nothing changes on the site: '
+                    . 'the proposal waits for an administrator to apply or reject it. A new proposal from you for the same page replaces your earlier one.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'id' => array('type' => 'integer', 'description' => 'Page id.'),
+                        'title' => array('type' => 'string', 'maxLength' => 255, 'description' => 'Page title, as shown in menus and headings.'),
+                        'metaTitle' => array('type' => 'string', 'description' => 'Title for search engines and browser tabs.'),
+                        'description' => array('type' => 'string', 'description' => 'Meta description for search results.'),
+                        'keywords' => array('type' => 'string'),
+                    ),
+                    'required' => array('id'),
+                ),
+                'annotations' => $edit,
+            ),
+            array(
+                'name' => 'update_text_widget',
+                'title' => 'Edit a text block (draft)',
+                'description' => 'Replaces the HTML of a Text widget in the page\'s unpublished draft. Visitors keep seeing the published page until an administrator publishes it. '
+                    . 'Allowed HTML: p, br, strong, em, u, s, sub, sup, a href, ul, ol, li, h2-h6, blockquote, tables. Anything else is removed.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'pageId' => array('type' => 'integer'),
+                        'widgetId' => array('type' => 'integer', 'description' => 'Id of a Text widget from get_page.'),
+                        'html' => array('type' => 'string', 'description' => 'The complete new content of the text block.'),
+                    ),
+                    'required' => array('pageId', 'widgetId', 'html'),
+                ),
+                'annotations' => $edit,
+            ),
+            array(
+                'name' => 'update_heading_widget',
+                'title' => 'Edit a heading (draft)',
+                'description' => 'Changes the text (and optionally the level) of a Heading widget in the page\'s unpublished draft. Nothing is published.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'pageId' => array('type' => 'integer'),
+                        'widgetId' => array('type' => 'integer', 'description' => 'Id of a Heading widget from get_page.'),
+                        'title' => array('type' => 'string', 'maxLength' => 255, 'description' => 'Plain text.'),
+                        'level' => array('type' => 'integer', 'minimum' => 1, 'maximum' => 6),
+                    ),
+                    'required' => array('pageId', 'widgetId', 'title'),
+                ),
+                'annotations' => $edit,
+            ),
+        );
+    }
+
+    protected static function readTools()
     {
         $readOnly = array('readOnlyHint' => true, 'destructiveHint' => false, 'idempotentHint' => true, 'openWorldHint' => false);
 
@@ -100,7 +181,18 @@ class Tools
      */
     public static function call($name, $arguments, $token)
     {
+        if (in_array($name, array('propose_page_fields', 'update_text_widget', 'update_heading_widget'), true) && !Model::canEdit($token)) {
+            throw ToolException::denied('This token is read-only. An administrator can allow editing for it under MCP Server in the admin.');
+        }
+
         switch ($name) {
+            case 'propose_page_fields':
+                return Editor::proposePageFields($token, self::intArgument($arguments, 'id', 1), $arguments);
+            case 'update_text_widget':
+                return Editor::updateText($token, self::intArgument($arguments, 'pageId', 1), self::intArgument($arguments, 'widgetId', 1), self::stringArgument($arguments, 'html'));
+            case 'update_heading_widget':
+                $level = isset($arguments['level']) ? self::intArgument($arguments, 'level', 1, 6) : null;
+                return Editor::updateHeading($token, self::intArgument($arguments, 'pageId', 1), self::intArgument($arguments, 'widgetId', 1), self::stringArgument($arguments, 'title'), $level);
             case 'list_languages':
                 return self::listLanguages();
             case 'list_menus':
@@ -108,7 +200,7 @@ class Tools
             case 'list_pages':
                 return self::listPages($arguments);
             case 'get_page':
-                return self::getPage($arguments);
+                return self::getPage($arguments, $token);
             case 'search_pages':
                 return self::searchPages($arguments);
         }
@@ -165,8 +257,16 @@ class Tools
         );
     }
 
-    protected static function getPage($arguments)
+    protected static function getPage($arguments, $token)
     {
+        $version = $arguments['version'] ?? 'published';
+        if (!in_array($version, array('published', 'draft'), true)) {
+            throw new ToolException('version must be "published" or "draft".');
+        }
+        if ($version === 'draft' && !Model::canEdit($token)) {
+            throw ToolException::denied('Drafts are only shown to tokens that may edit.');
+        }
+
         if (isset($arguments['id'])) {
             $row = Pages::find(self::intArgument($arguments, 'id', 1));
         } elseif (isset($arguments['url'])) {
@@ -177,7 +277,13 @@ class Tools
         if (!$row) {
             throw new ToolException('Page not found. Use list_pages or search_pages to find page ids.');
         }
-        return Pages::details($row, !empty($arguments['includeHtml']));
+        $page = Pages::details($row, !empty($arguments['includeHtml']), $version === 'draft');
+        if (Model::canEdit($token)) {
+            $page['pendingProposals'] = array_map(function ($change) {
+                return array('changeId' => (int)$change['id'], 'after' => $change['after'], 'createdAt' => date('c', $change['createdAt']));
+            }, Changes::pending($row['id']));
+        }
+        return $page;
     }
 
     protected static function searchPages($arguments)

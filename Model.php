@@ -41,14 +41,14 @@ class Model
     /**
      * @return array [token row, plain token]. The plain token is never stored and can't be shown again.
      */
-    public static function createToken($label)
+    public static function createToken($label, $allowEdit = false)
     {
         $token = self::TOKEN_PREFIX . bin2hex(random_bytes(32));
         $id = ipDb()->insert('mcp_token', array(
             'label' => mb_substr($label, 0, 100),
             'tokenHash' => hash('sha256', $token),
             'tokenHint' => substr($token, 0, strlen(self::TOKEN_PREFIX) + 4) . '…' . substr($token, -4),
-            'allowEdit' => 0,
+            'allowEdit' => $allowEdit ? 1 : 0,
             'createdBy' => ipAdminId() ?: null,
             'createdAt' => time(),
         ));
@@ -64,6 +64,16 @@ class Model
     public static function getTokens()
     {
         return ipDb()->selectAll('mcp_token', '*', array(), 'ORDER BY `revokedAt` IS NOT NULL, `id` DESC');
+    }
+
+    public static function setTokenEdit($id, $allowEdit)
+    {
+        ipDb()->update('mcp_token', array('allowEdit' => $allowEdit ? 1 : 0), array('id' => $id, 'revokedAt' => null));
+    }
+
+    public static function canEdit($token)
+    {
+        return !empty($token['allowEdit']);
     }
 
     public static function revokeToken($id)

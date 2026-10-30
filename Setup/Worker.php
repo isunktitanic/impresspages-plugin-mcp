@@ -39,6 +39,23 @@ class Worker extends \Ip\SetupWorker
             `message` varchar(255) DEFAULT NULL
         )" . $tableEnd);
 
+        // Edits made through MCP. Page fields wait here for review (pending → applied or rejected);
+        // widget edits are already in an unpublished page revision and are recorded as "draft".
+        ipDb()->execute('CREATE TABLE IF NOT EXISTS ' . ipTable('mcp_change') . " (
+            $id,
+            `tokenId` int(11) NOT NULL,
+            `pageId` int(11) NOT NULL,
+            `type` varchar(20) NOT NULL,
+            `widgetId` int(11) DEFAULT NULL,
+            `revisionId` int(11) DEFAULT NULL,
+            `before` mediumtext NOT NULL,
+            `after` mediumtext NOT NULL,
+            `status` varchar(20) NOT NULL,
+            `createdAt` int(11) NOT NULL,
+            `reviewedBy` int(11) DEFAULT NULL,
+            `reviewedAt` int(11) DEFAULT NULL
+        )" . $tableEnd);
+
         // Rate limiting and the admin screen look rows up by token or address and time.
         $indexes = array('tokenTime' => '`tokenId`, `time`', 'ipTime' => '`ip`, `time`');
         foreach ($indexes as $name => $columns) {
@@ -55,5 +72,6 @@ class Worker extends \Ip\SetupWorker
     {
         ipDb()->execute('DROP TABLE IF EXISTS ' . ipTable('mcp_token'));
         ipDb()->execute('DROP TABLE IF EXISTS ' . ipTable('mcp_log'));
+        ipDb()->execute('DROP TABLE IF EXISTS ' . ipTable('mcp_change'));
     }
 }
