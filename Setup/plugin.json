@@ -1,0 +1,42 @@
+{
+    "title": "MCP Server",
+    "version": "1.0",
+    "name": "Mcp",
+    "description": "Lets AI assistants such as Claude read your pages over the Model Context Protocol. Read-only, with API tokens, a rate limit and a request log.",
+    "author": "ImpressPages community",
+    "options": [
+        {
+            "label": "Enable the MCP endpoint",
+            "name": "enabled",
+            "type": "Checkbox",
+            "default": 1,
+            "note": "The endpoint is /mcp on your site. Create API tokens under MCP Server in the admin menu."
+        },
+        {
+            "label": "Require HTTPS",
+            "name": "httpsOnly",
+            "type": "Checkbox",
+            "default": 1,
+            "note": "Refuses plain HTTP so tokens are never sent unencrypted. Requests from this computer (127.0.0.1) are always allowed, for local testing."
+        },
+        {
+            "label": "Requests per minute per token",
+            "name": "rateLimit",
+            "type": "Text",
+            "default": "60"
+        },
+        {
+            "label": "Include hidden and password-protected pages",
+            "name": "includeHidden",
+            "type": "Checkbox",
+            "default": 0,
+            "note": "Off: assistants only see what a visitor can see."
+        },
+        {
+            "label": "Keep the request log for (days)",
+            "name": "logDays",
+            "type": "Text",
+            "default": "30"
+        }
+    ]
+}
